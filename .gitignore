@@ -8,3 +8,9 @@ caveman-compress.md
 .claude/worktrees/
 evals/snapshots/*.html
 evals/snapshots/*.png
+
+# IDE / editor folders
+.idea/
+.vscode/
+.cursor/
+.windsurf/
