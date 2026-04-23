@@ -218,6 +218,16 @@ This repo also ships `.codex/hooks.json` and enables hooks in `.codex/config.tom
 codex_hooks = true
 ```
 
+Bulk apply across many repos from this clone with Makefile helpers:
+
+```bash
+make info
+make codex_spread_dry_run SPREAD_DIRS="/Users/username/dev /Users/username/work"
+make codex_spread SPREAD_DIRS="/Users/username/dev"
+```
+
+Default mode is dry-run. The Make targets call the spread script, which scans for git repos, merges caveman into `.codex/hooks.json`, and enables `codex_hooks = true` in `.codex/config.toml` without deleting other settings.
+
 </details>
 
 <details>
