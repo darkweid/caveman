@@ -47,7 +47,8 @@ class SpreadCodexCavemanTests(unittest.TestCase):
 
             config_text = (repo / ".codex" / "config.toml").read_text()
             self.assertIn("[features]", config_text)
-            self.assertIn("codex_hooks = true", config_text)
+            self.assertIn("hooks = true", config_text)
+            self.assertNotIn("codex_hooks", config_text)
 
     def test_apply_merges_existing_codex_files(self):
         with tempfile.TemporaryDirectory(prefix="caveman-codex-merge-") as tmp:
@@ -102,7 +103,46 @@ class SpreadCodexCavemanTests(unittest.TestCase):
 
             config_text = (codex_dir / "config.toml").read_text()
             self.assertIn("other_flag = true", config_text)
-            self.assertIn("codex_hooks = true", config_text)
+            self.assertIn("hooks = true", config_text)
+            self.assertNotIn("codex_hooks", config_text)
+
+    def test_apply_migrates_old_codex_hook_flag(self):
+        cases = [
+            ("old true", "[features]\ncodex_hooks = true\n"),
+            ("old false", "[features]\ncodex_hooks = false\n"),
+            ("new false", "[features]\nhooks = false\n"),
+            ("both keys", "[features]\nhooks = false\ncodex_hooks = true\n"),
+        ]
+        for name, config in cases:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory(prefix="caveman-codex-migrate-") as tmp:
+                    repo = Path(tmp) / "alpha"
+                    codex_dir = repo / ".codex"
+                    (repo / ".git").mkdir(parents=True)
+                    codex_dir.mkdir()
+                    (codex_dir / "config.toml").write_text(config)
+
+                    result = self.run_cmd("--apply", str(repo))
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    config_text = (codex_dir / "config.toml").read_text()
+                    self.assertIn("hooks = true", config_text)
+                    self.assertNotIn("codex_hooks", config_text)
+
+    def test_dry_run_does_not_migrate_old_codex_hook_flag(self):
+        with tempfile.TemporaryDirectory(prefix="caveman-codex-dry-run-migrate-") as tmp:
+            repo = Path(tmp) / "alpha"
+            codex_dir = repo / ".codex"
+            (repo / ".git").mkdir(parents=True)
+            codex_dir.mkdir()
+            config_path = codex_dir / "config.toml"
+            config_path.write_text("[features]\ncodex_hooks = true\n")
+
+            result = self.run_cmd(str(repo))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("config=updated", result.stdout)
+            self.assertEqual(config_path.read_text(), "[features]\ncodex_hooks = true\n")
 
 
 if __name__ == "__main__":

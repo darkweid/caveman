@@ -105,8 +105,8 @@ def ensure_caveman_session_start(
     return status
 
 
-def ensure_codex_hooks_enabled(config_path: Path, *, apply: bool) -> str:
-    feature_line = "codex_hooks = true\n"
+def ensure_hooks_enabled(config_path: Path, *, apply: bool) -> str:
+    feature_line = "hooks = true\n"
     if not config_path.exists():
         if apply:
             config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,7 +116,7 @@ def ensure_codex_hooks_enabled(config_path: Path, *, apply: bool) -> str:
     text = config_path.read_text()
     lines = text.splitlines(keepends=True)
     section_pattern = re.compile(r"^\s*\[([^\]]+)\]\s*$")
-    key_pattern = re.compile(r"^(\s*)codex_hooks\s*=\s*(.+?)(\s*(#.*)?)?\n?$")
+    key_pattern = re.compile(r"^(\s*)(hooks|codex_hooks)\s*=\s*(.+?)(\s*(#.*)?)?\n?$")
 
     feature_start: int | None = None
     feature_end = len(lines)
@@ -141,19 +141,46 @@ def ensure_codex_hooks_enabled(config_path: Path, *, apply: bool) -> str:
             config_path.write_text(new_text)
         return "updated"
 
+    hooks_index: int | None = None
+    hooks_match: re.Match[str] | None = None
+    deprecated_indexes: list[int] = []
+    deprecated_indent = ""
     for index in range(feature_start + 1, feature_end):
         match = key_pattern.match(lines[index])
         if not match:
             continue
-        current_value = match.group(2).strip().lower()
-        if current_value == "true":
-            return "unchanged"
-        lines[index] = f"{match.group(1)}codex_hooks = true\n"
-        if apply:
-            config_path.write_text("".join(lines))
-        return "updated"
+        key = match.group(2)
+        if key == "hooks" and hooks_index is None:
+            hooks_index = index
+            hooks_match = match
+        elif key == "codex_hooks":
+            deprecated_indexes.append(index)
+            if not deprecated_indent:
+                deprecated_indent = match.group(1)
 
-    lines.insert(feature_end, feature_line)
+    updated = False
+    if hooks_index is None:
+        if deprecated_indexes:
+            lines[deprecated_indexes[0]] = f"{deprecated_indent}hooks = true\n"
+            for index in reversed(deprecated_indexes[1:]):
+                del lines[index]
+        else:
+            lines.insert(feature_end, feature_line)
+        updated = True
+    else:
+        assert hooks_match is not None
+        current_value = hooks_match.group(3).strip().lower()
+        if current_value != "true":
+            lines[hooks_index] = f"{hooks_match.group(1)}hooks = true\n"
+            updated = True
+        if deprecated_indexes:
+            for index in reversed(deprecated_indexes):
+                del lines[index]
+            updated = True
+
+    if not updated:
+        return "unchanged"
+
     if apply:
         config_path.write_text("".join(lines))
     return "updated"
@@ -166,7 +193,7 @@ def process_repo(repo: Path, template_session_start: list[dict], *, apply: bool)
         template_session_start,
         apply=apply,
     )
-    config_status = ensure_codex_hooks_enabled(codex_dir / "config.toml", apply=apply)
+    config_status = ensure_hooks_enabled(codex_dir / "config.toml", apply=apply)
     return RepoResult(repo=repo, hooks_status=hooks_status, config_status=config_status)
 
 
